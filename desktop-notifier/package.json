@@ -1,0 +1,32 @@
+{
+  "name": "desktop-notifier",
+  "version": "1.0.0",
+  "main": "main.js",
+  "start": "electron .",
+  "scripts": {
+    "main": "src/index.ts",
+    "start": "ts-node-dev src/index.ts",
+    "start-backend": "ts-node-dev --respawn --transpile-only /src/index.ts",
+    "build-backend": "tsc -p backend/tsconfig.json",
+    "build": "electron-builder",
+    "dev": "electronmon ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.9.0"
+  },
+  "devDependencies": {
+    "electron": "^36.4.0",
+    "electronmon": "^2.0.3"
+  },
+  "build": {
+    "appId": "com.yourapp.id",
+    "productName": "hiren lalani",
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

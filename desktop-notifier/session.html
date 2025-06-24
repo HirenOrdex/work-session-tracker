@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Work Session Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      font-size: 16px;
+    }
+
+    #status {
+      margin-top: 20px;
+      font-size: 18px;
+    }
+
+    ul {
+      padding-left: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Work Session Tracker</h1>
+
+  <div>
+    <button id="startSessionBtn">Start Session</button>
+    <button id="endSessionBtn" disabled>End Session</button>
+  </div>
+
+  <div>
+    <button id="startBreakBtn" disabled>Start Break</button>
+    <button id="endBreakBtn" disabled>End Break</button>
+  </div>
+
+  <div id="status">
+    <p>Session Status: <span id="sessionStatus">No active session</span></p>
+    <p>Session Start Time: <span id="sessionStartTime">-</span></p>
+    <p><strong>Time Left:</strong> <span id="timeLeft">-</span></p>
+
+    <p>Break Status: <span id="breakStatus">No active break</span></p>
+    <p><strong>Break History:</strong></p>
+    <ul id="breakList"></ul>
+  </div>
+
+  <script>
+    let jwt = null;
+    const apiBase = 'http://localhost:4000/api/session';
+
+    const startSessionBtn = document.getElementById('startSessionBtn');
+    const endSessionBtn = document.getElementById('endSessionBtn');
+    const startBreakBtn = document.getElementById('startBreakBtn');
+    const endBreakBtn = document.getElementById('endBreakBtn');
+
+    const sessionStatus = document.getElementById('sessionStatus');
+    const sessionStartTime = document.getElementById('sessionStartTime');
+    const breakStatus = document.getElementById('breakStatus');
+    const breakList = document.getElementById('breakList');
+    const timeLeftEl = document.getElementById('timeLeft');
+
+    const parseDate = (obj) => new Date(obj?.$date || obj);
+
+    window.electronAPI.onReceiveToken((event, token) => {
+      jwt = token;
+      console.log("[onReceiveToken] JWT received:", jwt);
+
+      if (!jwt) {
+        alert("You must login first!");
+        window.location.href = 'index.html';
+      } else {
+        fetchActiveSession();
+      }
+    });
+
+    async function fetchActiveSession() {
+      console.log("[fetchActiveSession] Called");
+      console.log("[fetchActiveSession] JWT:", jwt);
+
+      try {
+        if (!jwt) {
+          console.warn("[fetchActiveSession] JWT is null — skipping fetch.");
+          return;
+        }
+
+        const res = await fetch(`${apiBase}/active`, {
+          headers: {
+            Authorization: `Bearer ${jwt}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        console.log(`[fetchActiveSession] Response status: ${res.status}`);
+
+        if (!res.ok) {
+          const errText = await res.text();
+          console.warn("[fetchActiveSession] Failed to fetch session:", errText);
+
+          sessionStatus.textContent = 'No active session';
+          sessionStartTime.textContent = '-';
+          timeLeftEl.textContent = '-';
+          breakStatus.textContent = '-';
+          breakList.innerHTML = '';
+          startSessionBtn.disabled = false;
+          endSessionBtn.disabled = true;
+          startBreakBtn.disabled = true;
+          endBreakBtn.disabled = true;
+          return;
+        }
+
+        const session = await res.json();
+        console.log("[fetchActiveSession] Session data:", session);
+
+        sessionStatus.textContent = 'Active';
+        const startTime = parseDate(session.startTime);
+        sessionStartTime.textContent = startTime.toLocaleString();
+
+        const breaks = session.breaks || [];
+        let totalBreakMs = 0;
+        const now = new Date();
+        breaks.forEach((b) => {
+          const start = parseDate(b.start);
+          const end = b.end ? parseDate(b.end) : null;
+          if (end) {
+            totalBreakMs += end - start;
+          }
+        });
+
+        const elapsedMs = now - startTime - totalBreakMs;
+        const totalWorkMs = 8 * 60 * 60 * 1000;
+        const timeLeftMs = Math.max(0, totalWorkMs - elapsedMs);
+        const leftHrs = Math.floor(timeLeftMs / (1000 * 60 * 60));
+        const leftMin = Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60));
+        timeLeftEl.textContent = `${leftHrs}h ${leftMin}m`;
+
+        const activeBreak = breaks.find(b => !b.end);
+        if (activeBreak) {
+          breakStatus.textContent = `On Break since ${parseDate(activeBreak.start).toLocaleTimeString()}`;
+          startBreakBtn.disabled = true;
+          endBreakBtn.disabled = false;
+        } else {
+          breakStatus.textContent = 'No active break';
+          startBreakBtn.disabled = false;
+          endBreakBtn.disabled = true;
+        }
+
+        breakList.innerHTML = '';
+        breaks.forEach((b, i) => {
+          const start = parseDate(b.start);
+          const end = b.end ? parseDate(b.end) : null;
+          const li = document.createElement('li');
+          li.textContent = `Break ${i + 1}: ${start.toLocaleTimeString()} - ${end ? end.toLocaleTimeString() : 'ongoing'}`;
+          breakList.appendChild(li);
+        });
+
+        startSessionBtn.disabled = true;
+        endSessionBtn.disabled = false;
+
+      } catch (error) {
+        console.error('[fetchActiveSession] Error:', error);
+        sessionStatus.textContent = 'Error fetching session';
+      }
+    }
+
+    startSessionBtn.onclick = async () => {
+      console.log("[App] Starting session...");
+      try {
+        await window.electronAPI.startSession();
+        console.log("[App] Session started.");
+        fetchActiveSession();
+      } catch (err) {
+        console.error("[App] Failed to start session:", err);
+      }
+    };
+
+    endSessionBtn.onclick = async () => {
+      console.log("[App] Ending session...");
+      try {
+        await window.electronAPI.endSession();
+        console.log("[App] Session ended.");
+        fetchActiveSession();
+      } catch (err) {
+        console.error("[App] Failed to end session:", err);
+      }
+    };
+
+    startBreakBtn.onclick = async () => {
+      console.log("[App] Starting break...");
+      try {
+        await window.electronAPI.startBreak();
+        console.log("[App] Break started.");
+        fetchActiveSession();
+      } catch (err) {
+        console.error("[App] Failed to start break:", err);
+      }
+    };
+
+    endBreakBtn.onclick = async () => {
+      console.log("[App] Ending break...");
+      try {
+        await window.electronAPI.endBreak();
+        console.log("[App] Break ended.");
+        fetchActiveSession();
+      } catch (err) {
+        console.error("[App] Failed to end break:", err);
+      }
+    };
+
+    // Initial call to request token from main process
+    window.electronAPI.sendToken();
+  </script>
+</body>
+</html>

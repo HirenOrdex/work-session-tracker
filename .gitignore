@@ -1,0 +1,6 @@
+node_modules
+.env
+desktop-notifier/node_modules
+desktop-notifier/package-lock.json
+desktop-notifier/.env
+desktop-notifier/dist
