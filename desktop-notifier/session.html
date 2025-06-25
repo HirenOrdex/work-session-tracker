@@ -81,6 +81,8 @@
         window.location.href = 'index.html';
       } else {
         fetchActiveSession();
+        setInterval(fetchActiveSession, 60 * 1000); // 🔁 Fetch every 60 seconds
+        console.log("[onReceiveToken] Fetching active session...");
       }
     });
 
